@@ -161,6 +161,8 @@ class SpheroController:
                 self.enter_calibration_mode(api, 0)
                 self.exit_calibration_mode(api)
 
+                angle_offset=0
+
                 while self.is_running:
                     pygame.event.pump()
                     if not self.gameOn:
@@ -215,17 +217,31 @@ class SpheroController:
                         self.color = Color(r=255, g=0, b=0)
                         self.display_number(api)
 
+                    if (self.joystick.get_button(buttons['L1']) == 1):
+                        angle_offset=angle_offset-7
+                        api.set_heading(api.get_heading()-7)
 
+                    if (self.joystick.get_button(buttons['L2']) == 1):
+                        angle_offset=angle_offset-45
+                        api.set_heading(api.get_heading()-45)
+
+                    if (self.joystick.get_button(buttons['R1']) == 1):
+                        angle_offset=angle_offset+7
+                        api.set_heading(api.get_heading()+7)
+
+                    if (self.joystick.get_button(buttons['R2']) == 1):
+                        angle_offset=angle_offset+45
+                        api.set_heading(api.get_heading()+45)
 
 
                     if Y < -0.7:
-                        self.move(api, 0, self.speed)
+                        self.move(api, 0+angle_offset, self.speed)
                     elif Y > 0.7:
-                            self.move(api, 180, self.speed)
+                            self.move(api, 180+angle_offset, self.speed)
                     elif X > 0.7:
-                            self.move(api, 90, self.speed)
+                            self.move(api, 90+angle_offset, self.speed)
                     elif X < -0.7:
-                            self.move(api, 270, self.speed)
+                            self.move(api, 270+angle_offset, self.speed)
                     else:
                         api.set_speed(0)
    
