@@ -12,20 +12,20 @@ from rclpy.node import Node
 
 
 KEYMAP = {
-    'z': "D,50,50,0.2",
-    ' ': "D,150,150,0.2",   # forward
-    'q': "D,-50,50,0.2",    # left
-    'd': "D,50,-50,0.2",    # right
-    's': "D,-50,-50,0.2",   # backward
+    'z': "V,50,50",
+    ' ': "V,150,150",   # forward
+    'q': "V,-50,50",    # left
+    'd': "V,50,-50",    # right
+    's': "V,-50,-50",   # backward
     'x': "V,0,0",
 }
 
 HELP = """\
 Controls:
-  z = forward        -> D,50,50,0.2
-  q = left           -> D,-50,50,0.2
-  d = right          -> D,50,-50,0.2
-  s = backward       -> D,-50,-50,0.2
+  z = forward        -> V,50,50
+  q = left           -> V,-50,50
+  d = right          -> V,50,-50
+  s = backward       -> V,-50,-50
   x = stop           -> V,0,0
   a = quit
 

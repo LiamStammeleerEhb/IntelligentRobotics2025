@@ -46,7 +46,7 @@ bool setWheelMode(uint8_t id) {
 
 bool setVelocity(uint8_t id, int32_t vel) {
   const char* log;
-  bool ok = dxl_wb.goalVelocity(id, -vel, &log);
+  bool ok = dxl_wb.goalVelocity(id, vel, &log);
   if (!ok) {
     Serial.print("Failed to set velocity on ID ");
     Serial.print(id);
@@ -116,14 +116,10 @@ void turn(int degree, int time) {
   const float wheelCircumference = PI * WHEEL_DIAMETER;
   const float arc = PI * WHEEL_DISTANCE * (abs(degree) / 360.0);
 
-  // rotations each wheel should make
   float rotations = arc / wheelCircumference;
 
-  // Map rotations per second to motor speed scale (-100..100)
-  // This factor is heuristic — adjust for your robot's behavior
   float speed = rotations * (286.0 / time);
 
-  // Clamp to motor speed limits
   if (speed > 150) speed = 150;
 
   int vLeft, vRight;
@@ -221,46 +217,107 @@ void loop() {
     String input = Serial.readStringUntil('\n');
     input.trim();
 
-    // --- STOP command ---
+    // STOP command
     if (input.equalsIgnoreCase("STOP")) {
       stopWheels();
       return;
     }
 
-    int v1, v2;
-    float duration;
-    float degree=0;
+    String parts[4];
+    int n = 0;
+    splitCSV(input, parts, n, 4);
 
-    // First check: 3 values = timed move
-    String parts[3]; int n=0;
-    splitCSV(input, parts, n, 3);
-
-    switch (n) {
-      case 3:
-        if (isNumeric(parts[0]) && isNumeric(parts[1])) {
-          v1 = -parts[0].toInt();
-          v2 = -parts[1].toInt();
-          duration = parts[2].toFloat();
-          moveFor(duration, v1, v2);
-          Serial.print("Timed move: ");
-          Serial.print(v1); Serial.print(", ");
-          Serial.print(v2); Serial.print(" for ");
-          Serial.print(duration); Serial.println("s");
-        }
-        break;
-
-      case 2:
-        if (isNumeric(parts[0]) && isNumeric(parts[1])) {
-          degree = parts[0].toFloat();
-          duration = parts[1].toFloat();
-          turn(degree, duration);
-        }
-        break;
-
-      default:
-        Serial.println("Ongeldige invoer.");
-        Serial.println("Gebruik: v1,v2 (bv. 30,-30) OF v1,v2,duur  (bv. 30,30,2)");
-        break;
+    if (n < 1) {
+      Serial.println("Invalid input.");
+      return;
     }
+
+    String cmd = parts[0];
+
+    // ---------------------- MOVE command (V,v1,v2,time) ----------------------
+    if (cmd.equalsIgnoreCase("V")) {
+      if (n != 3) {
+        Serial.println("Use: V,v1,v2");
+        return;
+      }
+
+      if (!isNumeric(parts[1]) || !isNumeric(parts[2])) {
+        Serial.println("Invalid speeds");
+        return;
+      }
+
+      int v1 = parts[1].toInt();
+      int v2 = parts[2].toInt();
+      float duration = parts[3].toFloat();
+
+      setVelocity(1, v1);
+      setVelocity(2, v2);
+
+      Serial.print("Move: ");
+      Serial.print(v1); Serial.print(", ");
+      Serial.println(v2);
+      return;
+    }
+
+    // ---------------------- TIMED MOVE command (D,v1,v2,time) ----------------------
+    if (cmd.equalsIgnoreCase("D")) {
+      if (n != 4) {
+        Serial.println("Use: D,v1,v2,time");
+        return;
+      }
+
+      if (!isNumeric(parts[1]) || !isNumeric(parts[2])) {
+        Serial.println("Invalid speeds");
+        return;
+      }
+
+      int v1 = parts[1].toInt();
+      int v2 = parts[2].toInt();
+      float duration = parts[3].toFloat();
+
+      moveFor(duration, v1, v2);
+
+      Serial.print("Move: ");
+      Serial.print(v1); Serial.print(", ");
+      Serial.print(v2); Serial.print(" for ");
+      Serial.print(duration); Serial.println("s");
+      return;
+    }
+
+    // ---------------------- TURN command (T,degree,time) ----------------------
+    if (cmd.equalsIgnoreCase("T")) {
+      if (n != 3) {
+        Serial.println("Use: T,degree,time");
+        return;
+      }
+
+      if (!isNumeric(parts[1]) || !isNumeric(parts[2])) {
+        Serial.println("Invalid turn values");
+        return;
+      }
+
+      float degree = parts[1].toFloat();
+      float duration = parts[2].toFloat();
+
+      turn(degree, duration);
+      return;
+    }
+
+    // ---------------------- BATTERY command (B,degree,time) ----------------------
+    if (cmd.equalsIgnoreCase("B")) {
+      if (n != 1) {
+        Serial.println("Use: B");
+        return;
+      }
+
+      Serial.println(getBatteryVoltage());
+
+      return;
+    }
+
+    Serial.println("Unknown command. Use:");
+    Serial.println("  V,v1,v2,time");
+    Serial.println("  D,v1,v2,time");
+    Serial.println("  T,degree,time");
   }
 }
