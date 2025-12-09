@@ -151,7 +151,7 @@ void setup() {
   Serial.begin(57600);
   while(!Serial);
   
-  while(getBatteryVoltage()<11.5){
+  while(getBatteryVoltage()<11.3){
     Serial.println("Please connect to a powersource");
     delay(1000);
   }
@@ -197,13 +197,13 @@ void loop() {
   float voltage = getBatteryVoltage();
   
   if (millis() - lastBatteryCheck >= 60000) {
-    if (checkCiticalBattery()){
+    lastBatteryCheck = millis();  // Update the last check time
+    float voltage = getBatteryVoltage(); // Read current voltage
+
+    if (voltage < 11.3) {
       stopWheels();
-      while (getBatteryVoltage()<11.5){
-        Serial.print("Critical battery ");
-        Serial.println(voltage);
-        delay(1000);
-      }
+      Serial.print("Critical battery: ");
+      Serial.println(voltage);
     }
   }
 

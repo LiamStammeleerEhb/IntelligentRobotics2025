@@ -10,36 +10,28 @@ import select
 import rclpy
 from rclpy.node import Node
 
-
-KEYMAP = {
-    'z': "V,50,50",
-    ' ': "V,150,150",   # forward
-    'q': "V,-50,50",    # left
-    'd': "V,50,-50",    # right
-    's': "V,-50,-50",   # backward
-    'x': "V,0,0",
-}
+# Base speed
+BASE_SPEED = 0
 
 HELP = """\
 Controls:
-  z = forward        -> V,50,50
-  q = left           -> V,-50,50
-  d = right          -> V,50,-50
-  s = backward       -> V,-50,-50
-  x = stop           -> V,0,0
-  a = quit
-
-Focus the terminal window and press keys (no Enter needed).
+  z = increase speed         -> +5
+  s = decrease speed         -> -5
+  q = turn left              -> left wheel slower, right wheel faster
+  d = turn right             -> left wheel faster, right wheel slower
+  x = stop                   -> V,0,0
+  h = help
+  Ctrl-C = quit
 """
 
 class SerialTeleop(Node):
     def __init__(self):
         super().__init__('serial_teleop')
 
-        # Parameters (with your requested defaults)
+        # Parameters (with defaults)
         self.declare_parameter('port', '/dev/ttyACM0')
         self.declare_parameter('baud', 57600)
-        self.declare_parameter('timeout', 0.1)   # serial read timeout (s)
+        self.declare_parameter('timeout', 0.1)
 
         port = self.get_parameter('port').get_parameter_value().string_value
         baud = self.get_parameter('baud').get_parameter_value().integer_value
@@ -52,25 +44,27 @@ class SerialTeleop(Node):
             self.get_logger().error(f"Failed to open serial {port} @ {baud}: {e}")
             raise
 
-        # Let MCU (e.g., Arduino) reset if needed
         time.sleep(2.0)
         self.get_logger().info(f"Connected to {port} @ {baud}")
         self.get_logger().info("\n" + HELP)
 
-        # Start background thread for reading serial responses
+        self.speed = BASE_SPEED
+        self.left_wheel = self.speed
+        self.right_wheel = self.speed
+
+        # Background thread for serial reading
         self._stop_event = threading.Event()
         self.reader_thread = threading.Thread(target=self._serial_reader_loop, daemon=True)
         self.reader_thread.start()
 
-        # Setup terminal raw mode to read single keys
+        # Terminal raw mode
         self._orig_term = termios.tcgetattr(sys.stdin.fileno())
         tty.setcbreak(sys.stdin.fileno())
 
-        # Use a timer to poll stdin without blocking ROS spin
+        # Timer to poll keyboard
         self.key_timer = self.create_timer(0.02, self._poll_keyboard)
 
     def _serial_reader_loop(self):
-        """Continuously read lines from serial and print them."""
         while not self._stop_event.is_set():
             try:
                 if self.ser.in_waiting:
@@ -78,14 +72,20 @@ class SerialTeleop(Node):
                     if line:
                         self.get_logger().info(f"< {line}")
                 else:
-                    # small sleep to avoid busy loop
                     time.sleep(0.01)
             except Exception as e:
                 self.get_logger().warn(f"Serial read error: {e}")
                 time.sleep(0.1)
 
+    def _send_velocity(self, left, right, duration=0.2):
+        cmd = f"V,{left},{right}"
+        try:
+            self.ser.write((cmd + "\n").encode())
+            self.get_logger().info(f"> {cmd}")
+        except Exception as e:
+            self.get_logger().error(f"Serial write failed: {e}")
+
     def _poll_keyboard(self):
-        """Non-blocking single-key read from stdin; map to serial commands."""
         try:
             rlist, _, _ = select.select([sys.stdin], [], [], 0)
             if rlist:
@@ -93,26 +93,35 @@ class SerialTeleop(Node):
                 if not ch:
                     return
 
-                if ch == 'a':
-                    self.get_logger().info("Quit requested.")
-                    # shutdown node
-                    rclpy.shutdown()
-                    return
+                if ch == 'x':
+                    self.left_wheel = 0
+                    self.right_wheel = 0
+                    self.speed = BASE_SPEED
+                    self._send_velocity(0, 0)
 
-                if ch in KEYMAP:
-                    cmd = KEYMAP[ch]
-                    try:
-                        self.ser.write((cmd + "\n").encode())
-                        self.get_logger().info(f"> {cmd}")
-                    except Exception as e:
-                        self.get_logger().error(f"Serial write failed: {e}")
-                elif ch == 'h':
+                elif ch == 'z':
+                    self.speed += 5
+                    self.left_wheel = self.speed
+                    self.right_wheel = self.speed
+                    self._send_velocity(self.left_wheel, self.right_wheel)
+
+                elif ch == 's':
+                    self.speed -= 5
+                    self.left_wheel = self.speed
+                    self.right_wheel = self.speed
+                    self._send_velocity(self.left_wheel, self.right_wheel)
+
+                elif ch == 'q':
+                    self._send_velocity(-self.speed, self.speed)
+
+                elif ch == 'd':
+                    self._send_velocity(self.speed, -self.speed)
+
+                elif ch == 'h' or ch == '?':
                     self.get_logger().info("\n" + HELP)
-                else:
-                    # ignore unknown keys but give a tiny hint on '?'
-                    if ch == '?':
-                        self.get_logger().info("\n" + HELP)
 
+                elif ch == '\x03' or ch == 'a':  # Quit
+                    rclpy.shutdown()
         except Exception as e:
             self.get_logger().warn(f"Keyboard read error: {e}")
 
